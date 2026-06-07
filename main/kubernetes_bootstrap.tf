@@ -91,4 +91,9 @@ resource "helm_release" "aws_load_balancer_controller" {
     name  = "vpcId"
     value = aws_eks_cluster.bedrock.vpc_config[0].vpc_id
   }
+
+  set {
+    name  = "hostNetwork"
+    value = "true"
+  }
 }
