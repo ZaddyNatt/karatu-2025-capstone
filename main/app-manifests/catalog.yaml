@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: catalog
+  namespace: retail-app
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: catalog
+  namespace: retail-app
+data:
+  RETAIL_CATALOG_PERSISTENCE_PROVIDER: mysql
+  RETAIL_CATALOG_PERSISTENCE_ENDPOINT: project-bedrock-mysql.c49wwquaihhd.us-east-1.rds.amazonaws.com:3306
+  RETAIL_CATALOG_PERSISTENCE_DB_NAME: bedrockdb
+  RETAIL_CATALOG_SEARCH_ENABLED: "false"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: catalog-db
+  namespace: retail-app
+type: Opaque
+stringData:
+  RETAIL_CATALOG_PERSISTENCE_USER: bedrock_admin
+  RETAIL_CATALOG_PERSISTENCE_PASSWORD: BedrockSecure2025!
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog
+  namespace: retail-app
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: catalog
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog
+  namespace: retail-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: catalog
+  template:
+    metadata:
+      labels:
+        app: catalog
+    spec:
+      serviceAccountName: catalog
+      containers:
+        - name: catalog
+          image: "public.ecr.aws/aws-containers/retail-store-sample-catalog:1.6.1"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: catalog
+            - secretRef:
+                name: catalog-db
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
