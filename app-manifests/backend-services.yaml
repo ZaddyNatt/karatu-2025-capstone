@@ -1,10 +1,258 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: carts
+  namespace: retail-app
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: carts
+  namespace: retail-app
+data:
+  RETAIL_CART_PERSISTENCE_PROVIDER: dynamodb
+  RETAIL_CART_PERSISTENCE_DYNAMODB_TABLE_NAME: project-bedrock-carts
+  RETAIL_CART_PERSISTENCE_DYNAMODB_CREATE_TABLE: "false"
+  AWS_REGION: us-east-1
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: carts
+  namespace: retail-app
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: carts
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: carts
+  namespace: retail-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: carts
+  template:
+    metadata:
+      labels:
+        app: carts
+    spec:
+      serviceAccountName: carts
+      containers:
+        - name: carts
+          image: "public.ecr.aws/aws-containers/retail-store-sample-cart:1.6.1"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: JAVA_OPTS
+              value: -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/urandom
+          envFrom:
+            - configMapRef:
+                name: carts
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 15
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: catalog
+  namespace: retail-app
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: catalog
+  namespace: retail-app
+data:
+  RETAIL_CATALOG_PERSISTENCE_PROVIDER: mysql
+  RETAIL_CATALOG_PERSISTENCE_ENDPOINT: project-bedrock-mysql.c49wwquaihhd.us-east-1.rds.amazonaws.com:3306
+  RETAIL_CATALOG_PERSISTENCE_DB_NAME: bedrockdb
+  RETAIL_CATALOG_SEARCH_ENABLED: "false"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: catalog-db
+  namespace: retail-app
+type: Opaque
+stringData:
+  RETAIL_CATALOG_PERSISTENCE_USER: bedrock_admin
+  RETAIL_CATALOG_PERSISTENCE_PASSWORD: BedrockSecure2025!
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog
+  namespace: retail-app
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: catalog
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog
+  namespace: retail-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: catalog
+  template:
+    metadata:
+      labels:
+        app: catalog
+    spec:
+      serviceAccountName: catalog
+      containers:
+        - name: catalog
+          image: "public.ecr.aws/aws-containers/retail-store-sample-catalog:1.6.1"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: catalog
+            - secretRef:
+                name: catalog-db
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: orders
+  namespace: retail-app
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: orders
+  namespace: retail-app
+data:
+  RETAIL_ORDERS_MESSAGING_PROVIDER: rabbitmq
+  RETAIL_ORDERS_MESSAGING_RABBITMQ_ADDRESSES: orders-rabbitmq:5672
+  RETAIL_ORDERS_PERSISTENCE_PROVIDER: postgres
+  RETAIL_ORDERS_PERSISTENCE_ENDPOINT: project-bedrock-postgres.c49wwquaihhd.us-east-1.rds.amazonaws.com:5432
+  RETAIL_ORDERS_PERSISTENCE_NAME: bedrockdb
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: orders-db
+  namespace: retail-app
+type: Opaque
+stringData:
+  RETAIL_ORDERS_PERSISTENCE_USERNAME: bedrock_admin
+  RETAIL_ORDERS_PERSISTENCE_PASSWORD: BedrockSecure2025!
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orders
+  namespace: retail-app
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: orders
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders
+  namespace: retail-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orders
+  template:
+    metadata:
+      labels:
+        app: orders
+    spec:
+      serviceAccountName: orders
+      containers:
+        - name: orders
+          image: "public.ecr.aws/aws-containers/retail-store-sample-orders:1.6.1"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: JAVA_OPTS
+              value: -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/urandom
+          envFrom:
+            - configMapRef:
+                name: orders
+            - secretRef:
+                name: orders-db
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 15
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: orders-rabbitmq
   namespace: retail-app
-  labels:
-    app: orders-rabbitmq
 spec:
   replicas: 1
   selector:
@@ -16,18 +264,21 @@ spec:
         app: orders-rabbitmq
     spec:
       containers:
-      - name: rabbitmq
-        image: public.ecr.aws/docker/library/rabbitmq:3-management
-        ports:
-        - containerPort: 5672
-          name: amqp
-        - containerPort: 15672
-          name: http
-        resources:
-          limits:
-            memory: 256Mi
-          requests:
-            memory: 128Mi
+        - name: rabbitmq
+          image: "public.ecr.aws/docker/library/rabbitmq:3-management"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: amqp
+              containerPort: 5672
+            - name: http
+              containerPort: 15672
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
 ---
 apiVersion: v1
 kind: Service
@@ -36,154 +287,9 @@ metadata:
   namespace: retail-app
 spec:
   ports:
-  - port: 5672
-    targetPort: 5672
-    name: amqp
-  - port: 15672
-    targetPort: 15672
-    name: http
+    - port: 5672
+      name: amqp
+    - port: 15672
+      name: http
   selector:
     app: orders-rabbitmq
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: catalog
-  namespace: retail-app
-  labels:
-    app: catalog
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: catalog
-  template:
-    metadata:
-      labels:
-        app: catalog
-    spec:
-      containers:
-      - name: catalog
-        image: public.ecr.aws/aws-containers/retail-store-sample-catalog:0.7.0
-        ports:
-        - containerPort: 8080
-        env:
-        - name: DB_ENDPOINT
-          value: "project-bedrock-mysql.c49wwquaihhd.us-east-1.rds.amazonaws.com:3306"
-        - name: DB_USER
-          value: "bedrock_admin"
-        - name: DB_PASSWORD
-          value: "BedrockSecure2025!"
-        - name: DB_NAME
-          value: "bedrockdb"
-        resources:
-          limits:
-            memory: 128Mi
-          requests:
-            memory: 64Mi
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: catalog
-  namespace: retail-app
-spec:
-  ports:
-  - port: 80
-    targetPort: 8080
-  selector:
-    app: catalog
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: carts
-  namespace: retail-app
-  labels:
-    app: carts
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: carts
-  template:
-    metadata:
-      labels:
-        app: carts
-    spec:
-      containers:
-      - name: carts
-        image: public.ecr.aws/aws-containers/retail-store-sample-cart:0.7.0
-        ports:
-        - containerPort: 8080
-        env:
-        - name: CARTS_DYNAMODB_TABLENAME
-          value: "project-bedrock-carts"
-        - name: AWS_REGION
-          value: "us-east-1"
-        resources:
-          limits:
-            memory: 512Mi
-          requests:
-            memory: 256Mi
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: carts
-  namespace: retail-app
-spec:
-  ports:
-  - port: 80
-    targetPort: 8080
-  selector:
-    app: carts
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: orders
-  namespace: retail-app
-  labels:
-    app: orders
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: orders
-  template:
-    metadata:
-      labels:
-        app: orders
-    spec:
-      containers:
-      - name: orders
-        image: public.ecr.aws/aws-containers/retail-store-sample-orders:0.7.0
-        ports:
-        - containerPort: 8080
-        env:
-        - name: SPRING_DATASOURCE_URL
-          value: "jdbc:postgresql://project-bedrock-postgres.c49wwquaihhd.us-east-1.rds.amazonaws.com:5432/bedrockdb"
-        - name: SPRING_DATASOURCE_USERNAME
-          value: "bedrock_admin"
-        - name: SPRING_DATASOURCE_PASSWORD
-          value: "BedrockSecure2025!"
-        - name: SPRING_RABBITMQ_HOST
-          value: "orders-rabbitmq"
-        resources:
-          limits:
-            memory: 512Mi
-          requests:
-            memory: 256Mi
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: orders
-  namespace: retail-app
-spec:
-  ports:
-  - port: 80
-    targetPort: 8080
-  selector:
-    app: orders
